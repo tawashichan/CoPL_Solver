@@ -3,49 +3,12 @@
 
 mod ast;
 mod lexer;
+mod evalml3;
 
-use crate::ast::{Number,Expr,ApplyRule};
+use crate::evalml3::*;
+use crate::evalml3::Fun;
 
 fn main() {
-
-    let sample = ApplyRule::EConst(Number(1));
-    let a = ApplyRule::EPLUS(
-        Expr::Number(Number(1)),
-        Expr::Number(Number(1)),
-        box ApplyRule::EConst(Number(1)),
-        box ApplyRule::EConst(Number(1)),
-        box ApplyRule::PSucc(
-            Number(1),
-            Number(1),
-            box ApplyRule::PZero(Number(1))
-            )
-        );
-
-    //let exp = Expr::Plus(box Expr::Number(Number(1)),box Expr::Number(Number(1)));    
-    //let exp = Expr::Plus(box Expr::Plus(box Expr::Number(Number(1)),box Expr::Number(Number(1))),box Expr::Number(Number(1)));    
-    let exp = Expr::Mul(
-        box Expr::Number(Number(0)),
-        box Expr::Plus(
-            box Expr::Number(Number(2)),
-            box Expr::Number(Number(2))
-        ),
-    );
-
-    /*let exp = Expr::Plus(
-        box Expr::Plus(
-            box Expr::Number(Number(1)),
-            box Expr::Number(Number(1))
-        ),
-        box Expr::Number(Number(1)),
-    );*/    
-   /*let exp = Expr::Plus(
-        box Expr::Number(Number(3)),
-        box Expr::Mul(
-            box Expr::Number(Number(2)),
-            box Expr::Number(Number(1)),
-        ),
-    ); */
-    let r = exp.get_rule();
-
-    println!("{:?}",r.string());
+    let exp = Exp::Fun(Fun::new("x",Exp::Op(Op::Plus,box Exp::Var("x"),box Exp::Int(1))));
+    println!("{}",exp.solve().string());
 }
