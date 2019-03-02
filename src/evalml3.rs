@@ -16,14 +16,14 @@ pub enum Value {
     Int(Int),
     Bool(Bool),
     Closure(Env,Fun),
-    Closurerec(Env,RecFun),
+    ClosureRec(Env,RecFun),
 }
 
 pub type Int = i64;
 
 pub type Bool = bool;
 
-pub type Var = &'static str;
+pub type Var = String;
 
 #[derive(Debug,Clone)]
 pub struct Fun(Var,Box<Exp>);
@@ -39,6 +39,7 @@ pub enum Op{
     Plus,
     Minus,
     Times,
+    Lt,
 }
 
 #[derive(Debug,Clone)]
@@ -51,12 +52,12 @@ pub enum Env {
 pub enum Rule{
     EInt(Env,Int),
     EBool(Env,Bool),
-    EIfT(Env,Exp,Exp,Box<Rule>,Box<Rule>),
-    EIfF(Env,Exp,Exp,Box<Rule>,Box<Rule>),
+    EIfT(Env,Exp,Exp,Box<Rule>,Box<Rule>,Value),
+    EIfF(Env,Exp,Exp,Box<Rule>,Box<Rule>,Value),
     EPlus(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>,Value),
     EMinus(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>,Value),
     ETimes(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>,Value),
-    ELt(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>),
+    ELt(Env,Int,Int,Box<Rule>,Box<Rule>,Box<Rule>,Value),
     EVar1(Env,Var,Value),
     EVar2(Env,Var,Box<Rule>,Value),
     ELet(Env,Let,Box<Rule>,Box<Rule>,Value),
@@ -65,7 +66,7 @@ pub enum Rule{
     BPlus(Int,Int,Value),
     BMinus(Int,Int),
     BTimes(Int,Int,Value),
-    BLt(Int,Int),
+    BLt(Int,Int,Value),
 }
 
 impl Exp {
@@ -77,6 +78,7 @@ impl Exp {
                 Op::Plus => format!("{} + {}",e1.string(),e2.string()),
                 Op::Minus => format!("{} - {}",e1.string(),e2.string()),
                 Op::Times=> format!("{} * {}",e1.string(),e2.string()),
+                Op::Lt=> format!("{} < {}",e1.string(),e2.string()),
             },
             Exp::Fun(Fun(var,box exp)) => {
                 format!("fun {} -> {}",var,exp.string())
@@ -88,17 +90,18 @@ impl Exp {
                 format!("{} {}",e1.string(),e2.string())
             },
             Exp::Let(Let(var,box e1,box e2)) => format!("let {} = {} in {}",var,e1.string(),e2.string()),
+            Exp::If(box cond,box then,box els) => format!("if {} then {} else {}",cond.string(),then.string(),els.string()),
             _ => panic!()
         }
     }
 
-    pub fn solve(&self,env: &Env) -> Rule {
+    pub fn solve(&self,env: &Env) -> Rule {  
         match self {
             Exp::Fun(fun) => Rule::EFun(env.clone(),fun.clone(),Value::Closure(env.clone(),fun.clone())),
             Exp::Let(Let(var,box e1,box e2)) => {
                 let r1 = e1.solve(&env);
-                let r2 = e2.solve(&Env::Env(box env.clone(),var,box r1.value()));
-                let l = Let(var,box e1.clone(),box e2.clone()); 
+                let r2 = e2.solve(&Env::Env(box env.clone(),var.to_string(),box r1.value()));
+                let l = Let(var.to_string(),box e1.clone(),box e2.clone()); 
                 let e2_val = r2.value();
                 Rule::ELet(env.clone(),l,box r1,box r2,e2_val)
             },
@@ -145,17 +148,47 @@ impl Exp {
                         _ => panic!()
                     }
                 }
+                Op::Lt => {
+                    let r1 = e1.solve(env);
+                    let r2 = e2.solve(env);
+                    let e1_val = r1.value();
+                    let e2_val = r2.value();
+                    match (e1_val,e2_val) {
+                        (Value::Int(i1),Value::Int(i2)) => {
+                            let r3 = Rule::BLt(i1.clone(),i2.clone(),Value::Bool(i1 < i2));
+                            let val = r3.value();
+                            Rule::ELt(env.clone(),i1,i2,box r1,box r2,box r3,val)
+                        }
+                        _ => panic!()
+                    }
+                }
                 _ => panic!()
             }
             Exp::Var(var) => {
                 match env.search(var) {
-                    Some(value) => Rule::EVar1(env.clone(),var,value.clone()),
+                    Some(value) => Rule::EVar1(env.clone(),var.to_string(),value.clone()),
                     None => {
                         let prev_env = &env.prev().unwrap();
                         let r = self.solve(prev_env);
                         let val = r.value();
-                        Rule::EVar2(env.clone(),var,box r,val)
+                        Rule::EVar2(env.clone(),var.to_string(),box r,val)
                     },
+                }
+            }
+            Exp::If(box cond,box then,box els) => {
+                let r1 = cond.solve(env);
+                match r1.value() {
+                    Value::Bool(b) => 
+                        if b {
+                            let r2 = then.solve(env);
+                            let val = r2.value();
+                            Rule::EIfT(env.clone(),cond.clone(),then.clone(),box r1,box r2,val)
+                        } else {
+                            let r2 = els.solve(env);
+                            let val = r2.value();
+                            Rule::EIfT(env.clone(),cond.clone(),els.clone(),box r1,box r2,val)
+                        }
+                    _ => panic!()
                 }
             }
             _ => panic!()
@@ -166,80 +199,85 @@ impl Exp {
 
 impl Rule {
 
-    pub fn string(&self) -> String {
-        match self {
+    pub fn string(&self,depth: i32) -> String {
+        let space = (0..depth).fold("".to_string(),|acm,_| format!("{}      ",acm) );
+        let s = match self {
             Rule::EFun(env,fun,val) =>{
-                format!("{} |- {} evalto {} by E-Fun{{}};",env.string(),fun.string(),val.string())
+                format!("{} |- {} evalto {} by E-Fun {{",env.string(),fun.string(),val.string())
             },
             Rule::ELet(env,Let(var,e1,e2),box r1,box r2,val) =>{
-                format!("{} |- let {} = {} in {} evalto {} by E-Let{{ {} {} }};",
+                format!("{} |- let {} = {} in {} evalto {} by E-Let{{\n{}\n{}",
                     env.string(),
                     var,
                     e1.string(),
                     e2.string(),
                     val.string(),
-                    r1.string(),
-                    r2.string(),
+                    r1.string(depth + 1),
+                    r2.string(depth + 1),
                 ) 
             },    
             Rule::EInt(env,i) => {
-                format!("{} |- {} evalto {} by E-Int{{}};",env.string(),i,i)
+                format!("{} |- {} evalto {} by E-Int{{",env.string(),i,i)
             },
             Rule::EVar1(env,var,value) => {
-                format!("{} |- {} evalto {} by E-Var1{{}};",env.string(),var,value.string())
+                format!("{} |- {} evalto {} by E-Var1{{",env.string(),var,value.string())
+            },
+            Rule::EVar2(env,var,box rule,value) => {
+                format!("{} |- {} evalto {} by E-Var2 {{\n{}",env.string(),var,value.string(),rule.string(depth + 1))
             },
             Rule::EApp(env,e1,e2,box r1,box r2,box r3,value) => {
-                format!("{} |- {} {} evalto {} by E-App{{ {} {} {} }};",
+                format!("{} |- {} {} evalto {} by E-App{{\n{}\n{}\n{}",
                     env.string(),
                     e1.string(),
                     e2.string(),
                     value.string(),
-                    r1.string(),
-                    r2.string(),
-                    r3.string(),
+                    r1.string(depth + 1),
+                    r2.string(depth + 1),
+                    r3.string(depth + 1),
                 )
             },
             Rule::EPlus(env,e1,e2,box r1,box r2,box r3,val) => {
-                format!("{} |- {} + {} evalto {} by E-Plus{{ {} {} {}}};",
+                format!("{} |- {} + {} evalto {} by E-Plus{{\n{}\n{}\n{}",
                     env.string(),
                     e1.string(),
                     e2.string(),
                     val.string(),
-                    r1.string(),
-                    r2.string(),
-                    r3.string()
+                    r1.string(depth + 1),
+                    r2.string(depth + 1),
+                    r3.string(depth + 1)
                 )
             },
             Rule::ETimes(env,e1,e2,box r1,box r2,box r3,val) => {
-                format!("{} |- {} * {} evalto {} by E-Times{{ {} {} {}}};",
+                format!("{} |- {} * {} evalto {} by E-Times{{\n{}\n{}\n{}",
                     env.string(),
                     e1.string(),
                     e2.string(),
                     val.string(),
-                    r1.string(),
-                    r2.string(),
-                    r3.string()
+                    r1.string(depth + 1),
+                    r2.string(depth + 1),
+                    r3.string(depth + 1)
                 )
             },
             Rule::BPlus(i1,i2,val) => {
-                format!("{} plus {} is {} by B-Plus{{}};",
+                format!("{} plus {} is {} by B-Plus{{",
                     i1,
                     i2,
                     val.string(),
                 )
             },
             Rule::BTimes(i1,i2,val) => {
-                format!("{} times {} is {} by B-Times{{}};",
+                format!("{} times {} is {} by B-Times{{",
                     i1,
                     i2,
                     val.string(),
                 )
             },
-            _ => panic!()
-        }   
+            _ => panic!("{:?}",self)
+        };
+        format!("{}{}\n{}}};",space,s,space)
     }
 
-    fn value (&self) -> Value {
+    pub fn value (&self) -> Value {
         match self {
             Rule::EInt(env,i) => Value::Int(*i),
             Rule::ELet(_,_,_,_,v) => v.clone(),
@@ -251,6 +289,9 @@ impl Rule {
             Rule::BTimes(_,_,v) => v.clone(),
             Rule::BPlus(_,_,v) => v.clone(),
             Rule::EApp(_,_,_,_,_,_,v) => v.clone(),
+            Rule::EIfT(_,_,_,_,_,v) => v.clone(),
+            Rule::ELt(_,_,_,_,_,_,v) => v.clone(),
+            Rule::BLt(_,_,v) => v.clone(),
             _ => panic!()
 
         }
@@ -265,7 +306,7 @@ impl Let {
 }
 
 impl Value {
-    fn string(&self) -> String {
+    pub fn string(&self) -> String {
         match self {
             Value::Closure(env,f) => format!("({})[{}]",env.string(),f.string()),
             Value::Int(i) => format!("{}",i),
@@ -285,7 +326,7 @@ impl Fun {
     }
 
     fn var(&self) -> Var {
-        self.0
+        self.0.clone()
     }
 
     fn body(&self) -> &Exp {
@@ -325,3 +366,4 @@ impl Env {
         }
     }
 }
+
