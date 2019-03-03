@@ -14,6 +14,13 @@ fn main() {
     //let s = "let max = fun x -> fun y -> if x < y then y else x in max 3 5";
     let s = "let twice = fun f -> fun x -> f (f x) in twice (fun x -> x * x) 2";
     let s = "let twice = fun f -> fun x -> f (f x) in twice twice (fun x -> x * x) 2";
+    let s = "let compose = fun f -> fun g -> fun x -> f (g x) in 
+   let p = fun x -> x * x in
+   let q = fun x -> x + 4 in
+   compose p q 4";
+   let s = "let s = fun f -> fun g -> fun x -> f x (g x) in
+   let k = fun x -> fun y -> x in
+   s k k 7";
     //let s = "let a = fun x -> (x 1) + 1 in a fun x -> x";  
     //let s = "eb ec ed ee";
     //let s = "ea eb ec + ed ee";
