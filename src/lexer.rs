@@ -21,6 +21,7 @@ pub enum Token {
     RARROW,
     THEN,
     ELSE,
+    REC,
     EOF,
 }
 
@@ -60,6 +61,7 @@ fn get_keyword_sub(str_vec: &[char], acm: String) -> (Token, &[char]) {
                 "if" => (Token::IF, str_vec),
                 "then" => (Token::THEN, str_vec),
                 "else" => (Token::ELSE, str_vec),
+                "rec" => (Token::REC, str_vec),
                 s =>  (Token::VAR(s.to_string()),str_vec)
             }
     }
