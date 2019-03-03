@@ -5,6 +5,7 @@ pub enum Token {
     RPAR,
     LBRACKET, // [
     RBRACKET, // ]
+    LT,
     EQUAL,
     PLUS,
     MINUS,
@@ -16,7 +17,10 @@ pub enum Token {
     TRUE,
     FALSE,
     IN,
+    IF,
     RARROW,
+    THEN,
+    ELSE,
     EOF,
 }
 
@@ -53,6 +57,9 @@ fn get_keyword_sub(str_vec: &[char], acm: String) -> (Token, &[char]) {
                 "true" => (Token::TRUE, str_vec),
                 "false" => (Token::FALSE, str_vec),
                 "in" => (Token::IN, str_vec),
+                "if" => (Token::IF, str_vec),
+                "then" => (Token::THEN, str_vec),
+                "else" => (Token::ELSE, str_vec),
                 s =>  (Token::VAR(s.to_string()),str_vec)
             }
     }
@@ -61,6 +68,7 @@ fn get_keyword_sub(str_vec: &[char], acm: String) -> (Token, &[char]) {
 fn get_num_str(str_vec: &[char]) -> (String, &[char],bool,bool) {
     get_num_str_sub(str_vec,"".to_string(),false,false)
 }
+
 
 fn get_num_str_sub(str_vec: &[char], acm: String,is_float: bool,is_minus: bool) -> (String, &[char],bool,bool) {
     match &str_vec[..] {
@@ -96,6 +104,7 @@ fn next_token(slice: &[char]) -> (Token, &[char]) {
                 ['>',res..] => (Token::RARROW,res),
                 _ => (Token::MINUS, rest),
             }
+            '<' => (Token::LT,rest),
             '*' => (Token::MUL, rest),
             c =>
                 if c.is_numeric() || *c == '-' {

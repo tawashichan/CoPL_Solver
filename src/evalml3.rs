@@ -52,12 +52,12 @@ pub enum Env {
 pub enum Rule{
     EInt(Env,Int),
     EBool(Env,Bool),
-    EIfT(Env,Exp,Exp,Box<Rule>,Box<Rule>,Value),
-    EIfF(Env,Exp,Exp,Box<Rule>,Box<Rule>,Value),
+    EIfT(Env,Exp,Exp,Exp,Box<Rule>,Box<Rule>,Value),
+    EIfF(Env,Exp,Exp,Exp,Box<Rule>,Box<Rule>,Value),
     EPlus(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>,Value),
     EMinus(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>,Value),
     ETimes(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>,Value),
-    ELt(Env,Int,Int,Box<Rule>,Box<Rule>,Box<Rule>,Value),
+    ELt(Env,Exp,Exp,Box<Rule>,Box<Rule>,Box<Rule>,Value),
     EVar1(Env,Var,Value),
     EVar2(Env,Var,Box<Rule>,Value),
     ELet(Env,Let,Box<Rule>,Box<Rule>,Value),
@@ -87,7 +87,14 @@ impl Exp {
                 format!("{}",var)
             },
             Exp::App(box e1,box e2) => {
-                format!("{} {}",e1.string(),e2.string())
+                let is_e1_atomic = e1.is_atomic();
+                let is_e2_atomic = e2.is_atomic();
+                match (is_e1_atomic,is_e2_atomic) {
+                    (true,true) => format!("{} {}",e1.string(),e2.string()),
+                    (true,false) => format!("{} ({})",e1.string(),e2.string()),
+                    (false,true) => format!("({}) {}",e1.string(),e2.string()),
+                    (false,false) => format!("({}) ({})",e1.string(),e2.string()),
+                }
             },
             Exp::Let(Let(var,box e1,box e2)) => format!("let {} = {} in {}",var,e1.string(),e2.string()),
             Exp::If(box cond,box then,box els) => format!("if {} then {} else {}",cond.string(),then.string(),els.string()),
@@ -157,7 +164,7 @@ impl Exp {
                         (Value::Int(i1),Value::Int(i2)) => {
                             let r3 = Rule::BLt(i1.clone(),i2.clone(),Value::Bool(i1 < i2));
                             let val = r3.value();
-                            Rule::ELt(env.clone(),i1,i2,box r1,box r2,box r3,val)
+                            Rule::ELt(env.clone(),e1.clone(),e2.clone(),box r1,box r2,box r3,val)
                         }
                         _ => panic!()
                     }
@@ -178,20 +185,24 @@ impl Exp {
             Exp::If(box cond,box then,box els) => {
                 let r1 = cond.solve(env);
                 match r1.value() {
-                    Value::Bool(b) => 
-                        if b {
-                            let r2 = then.solve(env);
-                            let val = r2.value();
-                            Rule::EIfT(env.clone(),cond.clone(),then.clone(),box r1,box r2,val)
-                        } else {
-                            let r2 = els.solve(env);
-                            let val = r2.value();
-                            Rule::EIfT(env.clone(),cond.clone(),els.clone(),box r1,box r2,val)
-                        }
+                    Value::Bool(b) => {
+                        let r2 = if b { then.solve(env) } else { els.solve(env) };
+                        let val = r2.value();
+                        Rule::EIfT(env.clone(),cond.clone(),then.clone(),els.clone(),box r1,box r2,val)
+                    }
                     _ => panic!()
                 }
             }
             _ => panic!()
+        }
+    }
+
+    fn is_atomic(&self) -> bool {
+        match self {
+            Exp::Int(_) => true,
+            Exp::Bool(_) => true,
+            Exp::Var(_) => true,
+            _ => false
         }
     }
 
@@ -226,15 +237,44 @@ impl Rule {
                 format!("{} |- {} evalto {} by E-Var2 {{\n{}",env.string(),var,value.string(),rule.string(depth + 1))
             },
             Rule::EApp(env,e1,e2,box r1,box r2,box r3,value) => {
-                format!("{} |- {} {} evalto {} by E-App{{\n{}\n{}\n{}",
-                    env.string(),
-                    e1.string(),
-                    e2.string(),
-                    value.string(),
-                    r1.string(depth + 1),
-                    r2.string(depth + 1),
-                    r3.string(depth + 1),
-                )
+                match (e1.is_atomic(),e2.is_atomic()) {
+                    (true,true) => format!("{} |- {} {} evalto {} by E-App{{\n{}\n{}\n{}",
+                        env.string(),
+                        e1.string(),
+                        e2.string(),
+                        value.string(),
+                        r1.string(depth + 1),
+                        r2.string(depth + 1),
+                        r3.string(depth + 1),
+                    ),
+                    (true,false) => format!("{} |- {} ({}) evalto {} by E-App{{\n{}\n{}\n{}",
+                        env.string(),
+                        e1.string(),
+                        e2.string(),
+                        value.string(),
+                        r1.string(depth + 1),
+                        r2.string(depth + 1),
+                        r3.string(depth + 1),
+                    ),
+                    (false,true) => format!("{} |- ({}) {} evalto {} by E-App{{\n{}\n{}\n{}",
+                        env.string(),
+                        e1.string(),
+                        e2.string(),
+                        value.string(),
+                        r1.string(depth + 1),
+                        r2.string(depth + 1),
+                        r3.string(depth + 1),
+                    ),
+                    (false,false) => format!("{} |- ({}) ({}) evalto {} by E-App{{\n{}\n{}\n{}",
+                        env.string(),
+                        e1.string(),
+                        e2.string(),
+                        value.string(),
+                        r1.string(depth + 1),
+                        r2.string(depth + 1),
+                        r3.string(depth + 1),
+                    ),
+                }
             },
             Rule::EPlus(env,e1,e2,box r1,box r2,box r3,val) => {
                 format!("{} |- {} + {} evalto {} by E-Plus{{\n{}\n{}\n{}",
@@ -272,6 +312,46 @@ impl Rule {
                     val.string(),
                 )
             },
+            Rule::EIfT(env,e1,e2,e3,r1,r2,value) => {
+                format!("{} |- if {} then {} else {} evalto {} by E-IfT {{\n{}\n{}",
+                    env.string(),
+                    e1.string(),
+                    e2.string(),
+                    e3.string(),
+                    value.string(),
+                    r1.string(depth + 1),
+                    r2.string(depth + 1),
+                )
+            },
+            Rule::EIfF(env,e1,e2,e3,r1,r2,value) => {
+                format!("{} |- if {} then {} else {} evalto {} by E-IfT {{\n{}\n{}",
+                    env.string(),
+                    e1.string(),
+                    e2.string(),
+                    e3.string(),
+                    value.string(),
+                    r1.string(depth + 1),
+                    r2.string(depth + 1),
+                )
+            },
+            Rule::ELt(env,e1,e2,r1,r2,r3,value) => {
+                format!("{} |- {} < {} evalto {} by E-Lt {{\n{}\n{}\n{}",
+                    env.string(),
+                    e1.string(),
+                    e2.string(),
+                    value.string(),
+                    r1.string(depth + 1),
+                    r2.string(depth + 1),
+                    r3.string(depth + 1)
+                )
+            },
+            Rule::BLt(i1,i2,value) => {
+                format!("{} less than {} is {} by B-Lt {{",
+                    i1,
+                    i2,
+                    value.string()
+                )
+            }
             _ => panic!("{:?}",self)
         };
         format!("{}{}\n{}}};",space,s,space)
@@ -289,7 +369,7 @@ impl Rule {
             Rule::BTimes(_,_,v) => v.clone(),
             Rule::BPlus(_,_,v) => v.clone(),
             Rule::EApp(_,_,_,_,_,_,v) => v.clone(),
-            Rule::EIfT(_,_,_,_,_,v) => v.clone(),
+            Rule::EIfT(_,_,_,_,_,_,v) => v.clone(),
             Rule::ELt(_,_,_,_,_,_,v) => v.clone(),
             Rule::BLt(_,_,v) => v.clone(),
             _ => panic!()
@@ -310,6 +390,7 @@ impl Value {
         match self {
             Value::Closure(env,f) => format!("({})[{}]",env.string(),f.string()),
             Value::Int(i) => format!("{}",i),
+            Value::Bool(b) => format!("{}",b),
             _ => "".to_string()
         }
     } 

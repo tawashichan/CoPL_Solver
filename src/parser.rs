@@ -74,6 +74,10 @@ fn parse_op_exp(tokens: &[Token]) -> (Exp,&[Token]) {
             let (ex,re) = parse_op_exp(res);
             (Exp::Op(Op::Times,box exp,box ex),re)
         },
+        [Token::LT,res..] => {
+            let (ex,re) = parse_op_exp(res);
+            (Exp::Op(Op::Lt,box exp,box ex),re)
+        },
         _ => {
             parse_app(exp, rest)
         }
@@ -95,6 +99,22 @@ fn parse_term(tokens: &[Token]) -> (Exp,&[Token]) {
         [Token::FALSE,rest..] =>   (Exp::Bool(false),rest),
         [Token::LET,rest..] => parse_let(tokens),
         [Token::FUNCTION,rest..] => parse_fun(tokens),
+        [Token::IF,rest..] => {
+            let (exp,res) = parse_exp(rest);
+            match res {
+                [Token::THEN,re..] => {
+                    let (ex,r) = parse_exp(re);
+                    match r {
+                        [Token::ELSE,rr..] => {
+                            let (e,rrr) = parse_exp(rr);
+                            (Exp::If(box exp,box ex,box e),rrr)
+                        }
+                        _ => panic!("")
+                    }
+                }
+                _ => panic!("")
+            }
+        }
         _ => panic!("{:?}",tokens)
     }
 }

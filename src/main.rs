@@ -11,15 +11,18 @@ use crate::evalml3::Fun;
 
 
 fn main() {
+    //let s = "let max = fun x -> fun y -> if x < y then y else x in max 3 5";
     let s = "let twice = fun f -> fun x -> f (f x) in twice (fun x -> x * x) 2";
-    //let s = "ea eb ec ed ee";
+    let s = "let twice = fun f -> fun x -> f (f x) in twice twice (fun x -> x * x) 2";
+    //let s = "let a = fun x -> (x 1) + 1 in a fun x -> x";  
+    //let s = "eb ec ed ee";
     //let s = "ea eb ec + ed ee";
     let tokens = lexer::str_to_tokens(s);
     println!("{:?}",tokens);
     let e = parser::parse(&tokens);
     println!("{:?}",e);
-    //let r = e.solve(&Env::None);
-    //println!("{}",r.string(0));
+    let r = e.solve(&Env::None);
+    println!("{}",r.string(0));
     //let e = Exp::Let(Let::new("y", Exp::Int(2),Exp::Fun(Fun::new("x", Exp::Op(Op::Plus,box Exp::Var("x"),box Exp::Var("y"))))));
     /*let exp = Exp::Let(
                 Let::new("sq", 
