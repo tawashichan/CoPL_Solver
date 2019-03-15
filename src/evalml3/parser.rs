@@ -1,6 +1,6 @@
 
-use crate::lexer::{Token};
-use crate::evalml3::{Exp,Op,Let,Fun,LetRec,Var,RecFun};
+use crate::evalml3::lexer::{Token};
+use crate::evalml3::eval::{Exp,Op,Let,Fun,LetRec,Var,RecFun};
 
 pub fn parse(tokens: &[Token]) -> Exp {
     let (exp,rest) = parse_exp(tokens);
