@@ -1,4 +1,4 @@
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     INT(i64),
     LPAR,
@@ -33,18 +33,18 @@ fn get_str(str_vec: &[char]) -> (String, &[char]) {
     get_str_sub(str_vec, "".to_string())
 }
 
-fn get_str_sub(str_vec: &[char],acm: String) -> (String,&[char]) {
+fn get_str_sub(str_vec: &[char], acm: String) -> (String, &[char]) {
     match str_vec {
-        [first,rest..] => match first {
-            '\"' => (acm,rest),
-            _c => get_str_sub(rest,format!("{}{}",acm,first))
-        }
-        &[] => (acm,&[]),
+        [first, rest..] => match first {
+            '\"' => (acm, rest),
+            _c => get_str_sub(rest, format!("{}{}", acm, first)),
+        },
+        &[] => (acm, &[]),
     }
 }
 
-fn get_keyword(str_vec: &[char]) -> (Token, &[char]){
-    get_keyword_sub(str_vec,"".to_string())
+fn get_keyword(str_vec: &[char]) -> (Token, &[char]) {
+    get_keyword_sub(str_vec, "".to_string())
 }
 
 fn get_keyword_sub(str_vec: &[char], acm: String) -> (Token, &[char]) {
@@ -52,40 +52,44 @@ fn get_keyword_sub(str_vec: &[char], acm: String) -> (Token, &[char]) {
         [first, rest..] if first.is_alphabetic() => {
             get_keyword_sub(rest, format!("{}{}", acm, first))
         }
-        _ =>  match &*acm {
-                "let" => (Token::LET, str_vec),
-                "fun" => (Token::FUNCTION, str_vec),
-                "true" => (Token::TRUE, str_vec),
-                "false" => (Token::FALSE, str_vec),
-                "in" => (Token::IN, str_vec),
-                "if" => (Token::IF, str_vec),
-                "then" => (Token::THEN, str_vec),
-                "else" => (Token::ELSE, str_vec),
-                "rec" => (Token::REC, str_vec),
-                s =>  (Token::VAR(s.to_string()),str_vec)
-            }
+        _ => match &*acm {
+            "let" => (Token::LET, str_vec),
+            "fun" => (Token::FUNCTION, str_vec),
+            "true" => (Token::TRUE, str_vec),
+            "false" => (Token::FALSE, str_vec),
+            "in" => (Token::IN, str_vec),
+            "if" => (Token::IF, str_vec),
+            "then" => (Token::THEN, str_vec),
+            "else" => (Token::ELSE, str_vec),
+            "rec" => (Token::REC, str_vec),
+            s => (Token::VAR(s.to_string()), str_vec),
+        },
     }
 }
 
-fn get_num_str(str_vec: &[char]) -> (String, &[char],bool,bool) {
-    get_num_str_sub(str_vec,"".to_string(),false,false)
+fn get_num_str(str_vec: &[char]) -> (String, &[char], bool, bool) {
+    get_num_str_sub(str_vec, "".to_string(), false, false)
 }
 
-
-fn get_num_str_sub(str_vec: &[char], acm: String,is_float: bool,is_minus: bool) -> (String, &[char],bool,bool) {
+fn get_num_str_sub(
+    str_vec: &[char],
+    acm: String,
+    is_float: bool,
+    is_minus: bool,
+) -> (String, &[char], bool, bool) {
     match &str_vec[..] {
-        [first,rest..] => {
+        [first, rest..] => {
             if first.is_numeric() {
-                get_num_str_sub(rest, format!("{}{}",acm,first),is_float,is_minus)
+                get_num_str_sub(rest, format!("{}{}", acm, first), is_float, is_minus)
             } else if *first == '-' && is_minus == false {
-                get_num_str_sub(rest, format!("{}{}",acm,first),is_float,is_minus)
+                get_num_str_sub(rest, format!("{}{}", acm, first), is_float, is_minus)
             } else if *first == '.' && is_float == false {
-                get_num_str_sub(rest,format!("{}{}",acm,first),true,is_minus)
+                get_num_str_sub(rest, format!("{}{}", acm, first), true, is_minus)
             } else {
-                (acm,str_vec,is_float,is_minus)
+                (acm, str_vec, is_float, is_minus)
             }
         }
-        &[] => (acm, &[],is_float,is_minus)
+        &[] => (acm, &[], is_float, is_minus),
     }
 }
 
@@ -103,36 +107,36 @@ fn next_token(slice: &[char]) -> (Token, &[char]) {
             ']' => (Token::RBRACKET, rest),
             '+' => (Token::PLUS, rest),
             '-' => match rest {
-                ['>',res..] => (Token::RARROW,res),
+                ['>', res..] => (Token::RARROW, res),
                 _ => (Token::MINUS, rest),
-            }
-            '<' => (Token::LT,rest),
+            },
+            '<' => (Token::LT, rest),
             '*' => (Token::MUL, rest),
-            c =>
+            c => {
                 if c.is_numeric() || *c == '-' {
-                    let (num_str, re,is_float,_) = get_num_str(slice); //moveもmutableな参照もしてないからここでslice使える
+                    let (num_str, re, is_float, _) = get_num_str(slice); //moveもmutableな参照もしてないからここでslice使える
                     let num = num_str.parse::<i64>().unwrap();
                     (Token::INT(num), re)
                 } else {
                     get_keyword(slice)
                 }
+            }
         },
-        [] => (Token::EOF, &[])
+        [] => (Token::EOF, &[]),
     }
 }
 
-fn get_tokens<'a>(slice: &[char],acm: &'a mut Vec<Token>) -> &'a Vec<Token> {
+fn get_tokens<'a>(slice: &[char], acm: &'a mut Vec<Token>) -> &'a Vec<Token> {
     match next_token(slice) {
-        (Token::EOF,_) => acm,
-        (token,slice) => {
+        (Token::EOF, _) => acm,
+        (token, slice) => {
             acm.push(token);
-            get_tokens(slice,acm)
-        },
+            get_tokens(slice, acm)
+        }
     }
 }
 
 pub fn str_to_tokens(str: &str) -> Vec<Token> {
     let str_vec = split_string(str);
-    get_tokens(&str_vec,&mut vec![]).to_owned()
+    get_tokens(&str_vec, &mut vec![]).to_owned()
 }
-
