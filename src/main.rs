@@ -2,20 +2,19 @@
 #![feature(box_syntax, box_patterns)]
 
 mod evalml3;
-mod nameless_ml3;
 mod evalml4;
+mod nameless_ml3;
 
 use crate::evalml4::eval::Env;
 use crate::evalml4::lexer;
 use crate::evalml4::parser;
 
 fn main() {
-    let s = "
-        let f = fun x -> match x with 
-        [] -> 0 
-        | a :: b -> a 
-        in f (4::[]) + f [] + f (1 :: 2 :: 3 :: [])
-    ";
+    let s = "let rec apply = fun l -> fun x ->
+      match l with [] -> x | f :: l -> apply l (f x) in
+    apply ((fun x -> x * x) :: (fun y -> y + 3) :: []) 4";
+    //let s = "let f = fun x -> x + 1 in f 5";
+    //let s = "let a = [] in match a with [] -> 5 | a :: b -> 6";
     let tokens = lexer::str_to_tokens(s);
     println!("{:?}", tokens);
     let e = parser::parse(&tokens);

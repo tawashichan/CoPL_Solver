@@ -12,7 +12,7 @@ pub enum Exp {
     RecFun(RecFun),
     Cons(Box<Exp>, Box<Exp>),
     Nil,
-    Match(Box<Exp>,Box<Exp>,Box<Exp>,Box<Exp>),
+    Match(Box<Exp>, Box<Exp>, Box<Exp>, Box<Exp>),
 }
 
 #[derive(Debug, Clone)]
@@ -82,8 +82,10 @@ pub enum Rule {
     EFun(Env, Fun, Value),
     EApp(Env, Exp, Exp, Box<Rule>, Box<Rule>, Box<Rule>, Value),
     EAppRec(Env, Exp, Exp, Box<Rule>, Box<Rule>, Box<Rule>, Value),
-    ENil(Env,Nil),
-    ECons(Env,Exp,Exp,Box<Rule>,Box<Rule>,Value),
+    ENil(Env, Nil),
+    EMatchNil(Env, Exp, Exp, Exp, Exp, Box<Rule>, Box<Rule>, Value),
+    EMatchCons(Env, Exp, Exp, Exp, Exp, Box<Rule>, Box<Rule>, Value),
+    ECons(Env, Exp, Exp, Box<Rule>, Box<Rule>, Value),
     BPlus(Int, Int, Value),
     BMinus(Int, Int, Value),
     BTimes(Int, Int, Value),
@@ -139,7 +141,17 @@ impl Exp {
                     (false, false) => format!("({}) :: ({})", e1.string(), e2.string()),
                 }
             }
-            _ => panic!(),
+            Exp::Match(e1, e2, e3, e4) => format!(
+                "match {} with
+                    [] -> {}
+                    | {} -> {}
+                ",
+                e1.string(),
+                e2.string(),
+                e3.string(),
+                e4.string()
+            ),
+            _ => panic!("{:?}", self),
         }
     }
 
@@ -335,26 +347,73 @@ impl Exp {
                     _ => panic!(),
                 }
             }
-            Exp::Nil => {
-                Rule::ENil(env.clone(),())
-            }
-            Exp::Cons(box e1,box e2) => {
+            Exp::Nil => Rule::ENil(env.clone(), ()),
+            Exp::Cons(box e1, box e2) => {
                 let r1 = e1.solve(env);
                 let r2 = e2.solve(env);
-                let cons = Value::Cons(box r1.value(),box r2.value());
-                Rule::ECons(
-                    env.clone(),
-                    e1.clone(),
-                    e2.clone(),
-                    box r1,
-                    box r2,
-                    cons
-                )
+                let cons = Value::Cons(box r1.value(), box r2.value());
+                Rule::ECons(env.clone(), e1.clone(), e2.clone(), box r1, box r2, cons)
             }
-            Exp::Match(box target, box nil,box nil_then, box cons, box cons_then) => {
-                
+            Exp::Match(box target, box nil_then, box cons, box cons_then) => {
+                let r1 = target.solve(env);
+                let r1_val = r1.value();
+                match r1_val {
+                    Value::Nil(Nil) => {
+                        let r2 = nil_then.solve(env);
+                        let v = r2.value();
+                        Rule::EMatchNil(
+                            env.clone(),
+                            target.clone(),
+                            nil_then.clone(),
+                            cons.clone(),
+                            cons_then.clone(),
+                            box r1,
+                            box r2,
+                            v,
+                        )
+                    }
+                    Value::Cons(box v1, box v2) => {
+                        match cons {
+                            Exp::Cons(box Exp::Var(v1_name), box Exp::Var(v2_name)) => {
+                                let then_env = &Env::Env(
+                                    box Env::Env(box env.clone(), v1_name.to_string(), box v1),
+                                    v2_name.to_string(),
+                                    box v2,
+                                );
+                                let r2 = cons_then.solve(then_env);
+                                let v = r2.value();
+                                Rule::EMatchCons(
+                                    env.clone(),
+                                    target.clone(),
+                                    nil_then.clone(),
+                                    cons.clone(),
+                                    cons_then.clone(),
+                                    box r1,
+                                    box r2,
+                                    v,
+                                )
+                            }
+                            _ => panic!(""),
+                        }
+
+                        /*let env2 = &Env::Env(box env );
+                        let r2 = cons_then.solve(env);
+                        let v = r2.value();
+                        Rule::EMatchCons(
+                            env.clone(),
+                            target.clone(),
+                            nil_then.clone(),
+                            cons.clone(),
+                            cons_then.clone(),
+                            box r1,
+                            box r2,
+                            v,
+                        )*/
+                    }
+                    _ => panic!("{:?}", r1),
+                }
             }
-            _ => panic!("{:?}",self),
+            _ => panic!("{:?}", self),
         }
     }
 
@@ -363,7 +422,7 @@ impl Exp {
             Exp::Int(_) => true,
             Exp::Bool(_) => true,
             Exp::Var(_) => true,
-            Exp::Cons(_, _) => true,
+            Exp::Cons(_, _) => false,
             Exp::Nil => true,
             _ => false,
         }
@@ -520,10 +579,8 @@ impl Rule {
             ),
             Rule::BLt(i1, i2, value) => {
                 format!("{} less than {} is {} by B-Lt {{", i1, i2, value.string())
-            },
-            Rule::ENil(env, nil) => {
-                format!("{} |- [] evalto [] by E-Nil {{",env.string())
             }
+            Rule::ENil(env, nil) => format!("{} |- [] evalto [] by E-Nil {{", env.string()),
             Rule::EAppRec(env, e1, e2, r1, r2, r3, value) => {
                 match (e1.is_atomic(), e2.is_atomic()) {
                     (true, true) => format!(
@@ -568,7 +625,7 @@ impl Rule {
                     ),
                 }
             }
-            Rule::ECons(env, e1, e2,box r1, box r2,value) => {
+            Rule::ECons(env, e1, e2, box r1, box r2, value) => {
                 match (e1.is_atomic(), e2.is_atomic()) {
                     (true, true) => format!(
                         "{} |- {} :: {} evalto {} by E-Cons{{\n{}\n{}",
@@ -608,6 +665,32 @@ impl Rule {
                     ),
                 }
             }
+            Rule::EMatchNil(env, target, nil_then, cons, cons_then, box r1, box r2, value) => {
+                format!(
+                    "{} |- match {} with [] -> {} | {} -> {} evalto {} by E-MatchNil{{\n{}\n{}",
+                    env.string(),
+                    target.string(),
+                    nil_then.string(),
+                    cons.string(),
+                    cons_then.string(),
+                    value.string(),
+                    r1.string(depth + 1),
+                    r2.string(depth + 1)
+                )
+            }
+            Rule::EMatchCons(env, target, nil_then, cons, cons_then, box r1, box r2, value) => {
+                format!(
+                    "{} |- match {} with [] -> {} | {} -> {} evalto {} by E-MatchCons{{\n{}\n{}",
+                    env.string(),
+                    target.string(),
+                    nil_then.string(),
+                    cons.string(),
+                    cons_then.string(),
+                    value.string(),
+                    r1.string(depth + 1),
+                    r2.string(depth + 1)
+                )
+            }
             _ => panic!("{:?}", self),
         };
         format!("{}{}\n{}}};", space, s, space)
@@ -631,9 +714,11 @@ impl Rule {
             Rule::EIfF(_, _, _, _, _, _, v) => v.clone(),
             Rule::ELt(_, _, _, _, _, _, v) => v.clone(),
             Rule::BLt(_, _, v) => v.clone(),
-            Rule::ENil(_,_) => Value::Nil(()), 
-            Rule::ECons(_,_,_,_,_,v) => v.clone(),
+            Rule::ENil(_, _) => Value::Nil(()),
+            Rule::ECons(_, _, _, _, _, v) => v.clone(),
             Rule::EAppRec(_, _, _, _, _, _, v) => v.clone(),
+            Rule::EMatchNil(_, _, _, _, _, _, _, v) => v.clone(),
+            Rule::EMatchCons(_, _, _, _, _, _, _, v) => v.clone(),
             _ => panic!("{:?}", self),
         }
     }
@@ -659,8 +744,22 @@ impl Value {
             Value::Int(i) => format!("{}", i),
             Value::Bool(b) => format!("{}", b),
             Value::Nil(()) => format!("[]"),
-            Value::Cons(box v1,box v2) => format!("{} :: {}",v1.string(),v2.string()),
+            Value::Cons(box v1, box v2) => match (v1.is_atomic(),v2.is_atomic()) {
+                (true,true) => format!("{} :: {}", v1.string(), v2.string()),
+                (true,false) => format!("{} :: ({})", v1.string(), v2.string()),
+                (false,true) => format!("({}) :: {}", v1.string(), v2.string()),
+                (false,false) => format!("({}) :: ({})", v1.string(), v2.string())
+            },
             _ => "".to_string(),
+        }
+    }
+
+     fn is_atomic(&self) -> bool {
+        match self {
+            Value::Int(_) => true,
+            Value::Bool(_) => true,
+            Value::Nil(_) => true,
+            _ => false,
         }
     }
 }

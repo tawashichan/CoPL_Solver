@@ -53,7 +53,7 @@ fn get_keyword(str_vec: &[char]) -> (Token, &[char]) {
 
 fn get_keyword_sub(str_vec: &[char], acm: String) -> (Token, &[char]) {
     match str_vec {
-        [first, rest..] if first.is_alphabetic() => {
+        [first, rest..] if first.is_alphabetic() || first.is_numeric() => {
             get_keyword_sub(rest, format!("{}{}", acm, first))
         }
         _ => match &*acm {
