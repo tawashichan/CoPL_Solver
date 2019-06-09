@@ -3,11 +3,12 @@
 
 mod evalml3;
 mod evalml4;
+mod evalml5;
 mod nameless_ml3;
 
-use crate::evalml4::eval::Env;
-use crate::evalml4::lexer;
-use crate::evalml4::parser;
+use crate::evalml5::eval::Env;
+use crate::evalml5::lexer;
+use crate::evalml5::parser;
 
 fn main() {
     let s = "let rec apply = fun l -> fun x ->
