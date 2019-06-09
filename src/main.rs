@@ -11,15 +11,16 @@ use crate::evalml5::lexer;
 use crate::evalml5::parser;
 
 fn main() {
-    let s = "let rec apply = fun l -> fun x ->
-      match l with [] -> x | f :: l -> apply l (f x) in
-    apply ((fun x -> x * x) :: (fun y -> y + 3) :: []) 4";
+    let s = " let rec max = fun l -> match l with 
+       x :: [] -> x 
+     | x :: y :: z -> if x < y then max (y :: z) else max (x :: z) in
+   max (9 :: 2 :: 3 :: [])";
     //let s = "let f = fun x -> x + 1 in f 5";
     //let s = "let a = [] in match a with [] -> 5 | a :: b -> 6";
     let tokens = lexer::str_to_tokens(s);
     println!("{:?}", tokens);
     let e = parser::parse(&tokens);
     println!("{:?}", e);
-    let r = e.solve(&Env::None);
-    println!("{}", r.string(0));
+    //let r = e.solve(&Env::None);
+    //println!("{}", r.string(0));
 }

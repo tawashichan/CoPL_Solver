@@ -1,4 +1,4 @@
-use crate::evalml5::eval::{Exp, Fun, Let, LetRec, Op, RecFun, Var,Clauses,Pattern};
+use crate::evalml5::eval::{Clauses, Exp, Fun, Let, LetRec, Op, Pattern, RecFun, Var};
 use crate::evalml5::lexer::Token;
 
 pub fn parse(tokens: &[Token]) -> Exp {
@@ -45,8 +45,8 @@ fn is_exp(tokens: &[Token]) -> bool {
         [Token::FALSE, rest..] => true,
         [Token::LET, rest..] => true,
         [Token::FUNCTION, rest..] => true,
-        [Token::MATCH,rest..] => true,
-        [Token::LBRACKET,rest..] => true,
+        [Token::MATCH, rest..] => true,
+        [Token::LBRACKET, rest..] => true,
         _ => false,
     }
 }
@@ -62,66 +62,54 @@ fn parse_app(exp: Exp, tokens: &[Token]) -> (Exp, &[Token]) {
 
 fn parse_match(tokens: &[Token]) -> (Exp, &[Token]) {
     match tokens {
-        /*[Token::MATCH,rest..] => {
-            let (exp,res) = parse_exp(rest);
+        [Token::MATCH, rest..] => {
+            let (exp, res) = parse_exp(rest);
             match res {
-                [Token::WITH,Token::LBRACKET,Token::RBRACKET,Token::RARROW,re..] => {
-                    let (ex,r) = parse_exp(re);
-                    match r {
-                        [Token::BAR,rr..] => {
-                            let (e,rrr) = parse_exp(rr);
-                            match rrr {
-                               [Token::RARROW,rrrr..] => {
-                                   let (ee,rrrrr) = parse_exp(rrrr);
-                                   (Exp::Match(box exp, box ex, box e,box ee), rrrrr)
-                               }
-                               _ => panic!("{:?}",rrr)
-                            }
-                        }
-                        _ => panic!("{:?}",r)
-                    }
+                [Token::WITH, re..] => {
+                    let (c, r) = parse_clauses(re);
+                    (Exp::Match(box exp, box c), r)
                 }
-                _ => panic!("{:?}",res)
+                _ => panic!("{:?}", res),
             }
-        }*/
-        _ => panic!("{:?}",tokens)
+        }
+        _ => panic!("{:?}", tokens),
     }
 }
 
-fn parse_clauses(tokens: &[Token]) -> (Clauses,&[Token]) {
-     let (pattern,rest) = parse_pattern(tokens);
+fn parse_clauses(tokens: &[Token]) -> (Clauses, &[Token]) {
+    let (pattern, rest) = parse_pattern(tokens);
     match rest {
-        [Token::RARROW,res..] => {
-            let (exp,re) = parse_exp(res);
+        [Token::RARROW, res..] => {
+            let (exp, re) = parse_exp(res);
             match re {
-                [Token::BAR,r..] => {
-                    let (c,rr) = parse_clauses(r);
-                    (Clauses::Complex(pattern,exp,box c),rr)
+                [Token::BAR, r..] => {
+                    let (c, rr) = parse_clauses(r);
+                    (Clauses::Complex(pattern, exp, box c), rr)
                 }
-                _ => (Clauses::Simple(pattern,exp),re)
+                _ => (Clauses::Simple(pattern, exp), re),
             }
-        },
-        _ => panic!("{:?}",tokens)
+        }
+        _ => panic!("{:?}", tokens),
     }
-} 
-
-fn parse_pattern(tokens: &[Token]) -> (Pattern,&[Token]){
-    let (p1,rest) = parse_pattern_sub(tokens);
-    match rest {
-        [Token::JOINER,res..] => {
-            let (p2,re) = parse_pattern(res);
-            (Pattern::Cons(box p1,box p2),re)
-        } 
-        _ => (p1,rest)
-    } 
 }
 
-fn parse_pattern_sub(tokens: &[Token]) -> (Pattern,&[Token]){
+fn parse_pattern(tokens: &[Token]) -> (Pattern, &[Token]) {
+    let (p1, rest) = parse_pattern_sub(tokens);
+    match rest {
+        [Token::JOINER, res..] => {
+            let (p2, re) = parse_pattern(res);
+            (Pattern::Cons(box p1, box p2), re)
+        }
+        _ => (p1, rest),
+    }
+}
+
+fn parse_pattern_sub(tokens: &[Token]) -> (Pattern, &[Token]) {
     match tokens {
-        [Token::ANY,rest..] => (Pattern::Any,rest),
-        [Token::VAR(v),rest..] => (Pattern::Var(v.clone()),rest),
-        [Token::LBRACKET,Token::RBRACKET,rest..] => (Pattern::Nil,rest),
-        _ => panic!()
+        [Token::ANY, rest..] => (Pattern::Any, rest),
+        [Token::VAR(v), rest..] => (Pattern::Var(v.clone()), rest),
+        [Token::LBRACKET, Token::RBRACKET, rest..] => (Pattern::Nil, rest),
+        _ => panic!("{:?}", tokens),
     }
 }
 
@@ -189,8 +177,8 @@ fn parse_term(tokens: &[Token]) -> (Exp, &[Token]) {
         [Token::LET, rest..] => parse_let(tokens),
         [Token::FUNCTION, rest..] => parse_fun(tokens),
         [Token::IF, rest..] => parse_if(tokens),
-        [Token::LBRACKET,Token::RBRACKET, rest..] => (Exp::Nil,rest),
-        [Token::MATCH,rest..] => parse_match(tokens),
+        [Token::LBRACKET, Token::RBRACKET, rest..] => (Exp::Nil, rest),
+        [Token::MATCH, rest..] => parse_match(tokens),
         _ => panic!("{:?}", tokens),
     }
 }
@@ -237,25 +225,33 @@ fn parse_rec_fun(var: Var, tokens: &[Token]) -> (RecFun, &[Token]) {
     }
 }
 
-
 #[test]
 fn parse_pattern1() {
     let tokens = vec![Token::VAR("x".to_string())];
-    let (p,_) = parse_pattern(&tokens);
-    assert_eq!(p,Pattern::Var("x".to_string()))
+    let (p, _) = parse_pattern(&tokens);
+    assert_eq!(p, Pattern::Var("x".to_string()))
 }
 
 #[test]
 fn parse_pattern2() {
-    let tokens = vec![Token::VAR("x".to_string()),Token::JOINER,Token::VAR("y".to_string())];
-    let (p,_) = parse_pattern(&tokens);
-    assert_eq!(p,Pattern::Cons(box Pattern::Var("x".to_string()),box Pattern::Var("y".to_string())))
+    let tokens = vec![
+        Token::VAR("x".to_string()),
+        Token::JOINER,
+        Token::VAR("y".to_string()),
+    ];
+    let (p, _) = parse_pattern(&tokens);
+    assert_eq!(
+        p,
+        Pattern::Cons(
+            box Pattern::Var("x".to_string()),
+            box Pattern::Var("y".to_string())
+        )
+    )
 }
-
 
 #[test]
 fn parse_pattern3() {
-    let tokens = vec![Token::VAR("x".to_string()),Token::RARROW];
-    let (p,_) = parse_pattern(&tokens);
-    assert_eq!(p,Pattern::Var("x".to_string()))
+    let tokens = vec![Token::VAR("x".to_string()), Token::RARROW];
+    let (p, _) = parse_pattern(&tokens);
+    assert_eq!(p, Pattern::Var("x".to_string()))
 }
