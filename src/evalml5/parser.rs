@@ -109,6 +109,13 @@ fn parse_pattern_sub(tokens: &[Token]) -> (Pattern, &[Token]) {
         [Token::ANY, rest..] => (Pattern::Any, rest),
         [Token::VAR(v), rest..] => (Pattern::Var(v.clone()), rest),
         [Token::LBRACKET, Token::RBRACKET, rest..] => (Pattern::Nil, rest),
+        [Token::LPAR,rest..] => {
+            let (p,res) = parse_pattern(rest);
+            match res {
+                [Token::RPAR,re..] => (p,re),
+                _ => panic!("{:?}", res),
+            }
+        }
         _ => panic!("{:?}", tokens),
     }
 }

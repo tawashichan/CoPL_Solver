@@ -16,6 +16,16 @@ fn main() {
      | x :: y :: z -> if x < y then max (y :: z) else max (x :: z) in
    max (9 :: 2 :: 3 :: [])";
     let s = " match [] with [] -> 1";
+    let s = "match 1 :: 2 with [] -> 1 | x :: y -> 2";
+    let s = " let rec max = fun l -> match l with 
+       x :: [] -> x 
+     | x :: y :: z -> if x < y then max (y :: z) else max (x :: z) in
+   max (9 :: 2 :: 3 :: [])";
+   let s = "let rec heads = fun l -> match l with
+       [] -> []
+     | [] :: l' -> heads l'
+     | (x :: _) :: l' -> x :: heads l' in
+   heads ((1 :: 2 :: []) :: [] :: (3 :: []) :: [])";
     //let s = "let f = fun x -> x + 1 in f 5";
     //let s = "let a = [] in match a with [] -> 5 | a :: b -> 6";
     let tokens = lexer::str_to_tokens(s);

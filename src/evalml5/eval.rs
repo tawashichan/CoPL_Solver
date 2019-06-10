@@ -106,9 +106,12 @@ pub enum Rule {
     BLt(Int, Int, Value),
     MVar(Env, Pattern, Value),
     MNil(Env),
-    MCons(),
+    MCons(Env, Pattern, Value, Box<Rule>, Box<Rule>),
     MWild(Value),
     NMConsNil(Value),
+    NMNilCons(Pattern),
+    NMConsConsL(Pattern, Value, Box<Rule>),
+    NMConsConsR(Pattern, Value, Box<Rule>),
     EMatchM1(Env, Exp, Clauses, Box<Rule>, Box<Rule>, Box<Rule>, Value),
     EMatchM2(
         Env,
@@ -120,6 +123,7 @@ pub enum Rule {
         Box<Rule>,
         Value,
     ),
+    EMatchN(Env, Exp, Clauses, Box<Rule>, Box<Rule>, Box<Rule>, Value),
 }
 
 impl Exp {
@@ -719,12 +723,50 @@ impl Rule {
                     r2.string(depth + 1)
                 )
             }
+            Rule::MVar(env, p, v) => format!(
+                "{} matches {} when ({}) by M-Var{{",
+                p.string(),
+                v.string(),
+                env.string()
+            ),
             Rule::MNil(env) => format!("[] matches [] when () by M-Nil{{"),
+            Rule::MCons(env, p, v, box r1, box r2) => format!(
+                "{} matches {} when ({}) by M-Cons{{\n{}\n{}",
+                p.string(),
+                v.string(),
+                env.string(),
+                r1.string(depth + 1),
+                r2.string(depth + 1)
+            ),
+            Rule::MWild(v) => format!("_ matches {} when () by M-Wild{{",v.string()),
+            Rule::NMConsNil(v) => format!("[] doesn't match {} by NM-ConsNil{{", v.string()),
+            Rule::NMConsConsL(p,v,box r) => format!("{} doesn't match {} by NM-ConsConsL{{\n{}",p.string(), v.string(),r.string(depth + 1)),
+            Rule::NMConsConsR(p,v,box r) => format!("{} doesn't match {} by NM-ConsConsR{{\n{}",p.string(), v.string(),r.string(depth + 1)),
             Rule::EMatchM1(env, exp, c, box r1, box r2, box r3, value) => format!(
                 "{} |- match {} with {} evalto {} by E-MatchM1{{\n{}\n{}\n{}",
                 env.string(),
                 exp.string(),
                 c.string(),
+                value.string(),
+                r1.string(depth + 1),
+                r2.string(depth + 1),
+                r3.string(depth + 1)
+            ),
+            Rule::EMatchM2(env, exp, c, c2, box r1, box r2, box r3, value) => format!(
+                "{} |- match {} with {} evalto {} by E-MatchM2{{\n{}\n{}\n{}",
+                env.string(),
+                exp.string(),
+                c.string(),
+                value.string(),
+                r1.string(depth + 1),
+                r2.string(depth + 1),
+                r3.string(depth + 1)
+            ),
+            Rule::EMatchN(env, exp, c1, box r1, box r2, box r3, value) => format!(
+                "{} |- match {} with {} evalto {} by E-MatchN{{\n{}\n{}\n{}",
+                env.string(),
+                exp.string(),
+                c1.string(),
                 value.string(),
                 r1.string(depth + 1),
                 r2.string(depth + 1),
@@ -758,6 +800,11 @@ impl Rule {
             Rule::EAppRec(_, _, _, _, _, _, v) => v.clone(),
             Rule::EMatchNil(_, _, _, _, _, _, _, v) => v.clone(),
             Rule::EMatchCons(_, _, _, _, _, _, _, v) => v.clone(),
+            Rule::EMatchM1(_, _, _, _, _, _, v) => v.clone(),
+            Rule::EMatchM2(_, _, _, _, _, _, _, v) => v.clone(),
+            Rule::EMatchN(_, _, _, _, _,_, v) => v.clone(),
+            Rule::NMConsConsL(_,v,_) => v.clone(),
+            Rule::NMConsConsR(_,v,_) => v.clone(),
             _ => panic!("{:?}", self),
         }
     }
@@ -883,10 +930,12 @@ impl Env {
         }
     }
 
-    fn merge(&self,env: &Env) -> Env {
+    fn merge(&self, env: &Env) -> Env {
         match env {
             Env::None => self.clone(),
-            Env::Env(box prev,var,box value) => Env::Env(box self.merge(prev),var.clone(), box value.clone())
+            Env::Env(box prev, var, box value) => {
+                Env::Env(box self.merge(prev), var.clone(), box value.clone())
+            }
         }
     }
 }
@@ -928,18 +977,57 @@ impl Pattern {
         }
     }
 
-    fn pattern_match(&self, value: &Value) -> (Rule,Env) {
+    fn pattern_match(&self, value: &Value) -> (Rule, Env, bool) {
         match self {
             Pattern::Nil => match value {
-                Value::Cons(_, _) => (Rule::NMConsNil(value.clone()),Env::None),
-                Value::Nil(_) => (Rule::MNil(Env::None),Env::None),
+                Value::Cons(_, _) => (Rule::NMConsNil(value.clone()), Env::None, false),
+                Value::Nil(_) => (Rule::MNil(Env::None), Env::None, true),
                 _ => panic!(),
             },
             Pattern::Var(v) => {
-                let env = Env::Env(box Env::None,v.clone(),box value.clone());
-                (Rule::MVar(env.clone(), self.clone(), value.clone()),env)
+                let env = Env::Env(box Env::None, v.clone(), box value.clone());
+                (
+                    Rule::MVar(env.clone(), self.clone(), value.clone()),
+                    env,
+                    true,
+                )
+            }
+            Pattern::Cons(p1, p2) => match value {
+                Value::Cons(v1, v2) => {
+                    let (r1, env1, is_match1) = p1.pattern_match(v1);
+                    let (r2, env2, is_match2) = p2.pattern_match(v2);
+                    match (is_match1, is_match2) {
+                        (false, _) => (
+                            Rule::NMConsConsL(self.clone(), value.clone(), box r1),
+                            Env::None,
+                            false,
+                        ),
+                        (_, false) => (
+                            Rule::NMConsConsR(self.clone(), value.clone(), box r2),
+                            Env::None,
+                            false,
+                        ),
+                        _ => {
+                            let env = env1.merge(&env2);
+                            (
+                                Rule::MCons(
+                                    env.clone(),
+                                    self.clone(),
+                                    value.clone(),
+                                    box r1,
+                                    box r2,
+                                ),
+                                env,
+                                true,
+                            )
+                        }
+                    }
+                }
+                Value::Nil(_) => (Rule::NMNilCons(self.clone()), Env::None, false),
+                _ => panic!(),
             },
-            _ => panic!(),
+            Pattern::Any => (Rule::MWild(value.clone()),Env::None,true),
+            _ => panic!("{:?}", self),
         }
     }
 }
@@ -960,7 +1048,7 @@ impl Clauses {
             Clauses::Simple(p, e) => {
                 let exp_r = exp.solve(env);
                 let exp_v = exp_r.value();
-                let (p_r,en) = p.pattern_match(&exp_v);
+                let (p_r, en, _) = p.pattern_match(&exp_v);
                 let e_r = e.solve(&env.merge(&en));
                 let value = e_r.value();
                 Rule::EMatchM1(
@@ -973,10 +1061,36 @@ impl Clauses {
                     value,
                 )
             }
-            Clauses::Complex(p, e, c) => {
+            Clauses::Complex(p, e, box c) => {
                 let exp_r = exp.solve(env);
                 let exp_v = exp_r.value();
-                panic!()
+                let (p_r, en, is_match) = p.pattern_match(&exp_v);
+                if is_match {
+                    let e_r = e.solve(&env.merge(&en));
+                    let value = e_r.value();
+                    Rule::EMatchM2(
+                        env.clone(),
+                        exp.clone(),
+                        self.clone(),
+                        c.clone(),
+                        box exp_r,
+                        box p_r,
+                        box e_r,
+                        value,
+                    )
+                } else {
+                    let c_r = c.solve(env, exp);
+                    let value = c_r.value();
+                    Rule::EMatchN(
+                        env.clone(),
+                        exp.clone(),
+                        self.clone(),
+                        box exp_r,
+                        box p_r,
+                        box c_r,
+                        value,
+                    )
+                }
             }
             _ => panic!(),
         }
