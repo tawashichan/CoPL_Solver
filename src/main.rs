@@ -15,12 +15,14 @@ fn main() {
        x :: [] -> x 
      | x :: y :: z -> if x < y then max (y :: z) else max (x :: z) in
    max (9 :: 2 :: 3 :: [])";
+    let s = " match [] with [] -> 1";
     //let s = "let f = fun x -> x + 1 in f 5";
     //let s = "let a = [] in match a with [] -> 5 | a :: b -> 6";
     let tokens = lexer::str_to_tokens(s);
     println!("{:?}", tokens);
     let e = parser::parse(&tokens);
     println!("{:?}", e);
-    //let r = e.solve(&Env::None);
-    //println!("{}", r.string(0));
+    let r = e.solve(&Env::None);
+    println!("{:?}", r);
+    println!("{}", r.string(0));
 }
